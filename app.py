@@ -164,7 +164,7 @@ class ScreenshotApp:
         self.config = UIConfig()
         self.api_key = load_environment()
         self.ai_processor = AIProcessor(self.api_key)
-        self.screenshot_handler = ScreenshotHandler(self.ai_processor, self._update_result_callback)
+        self.screenshot_handler = ScreenshotHandler(self.ai_processor, self._update_result)
         
         # App state
         self.running = True
@@ -178,7 +178,7 @@ class ScreenshotApp:
         self._setup_hotkeys()
         
         # Start operations
-        self.start_screenshot_thread()
+        # self.start_screenshot_thread()
         self.update_ui_periodic()
     
     def _setup_window(self):
@@ -241,7 +241,7 @@ class ScreenshotApp:
         keyboard.add_hotkey('shift+R', self.reload_app)
         keyboard.add_hotkey('shift+ctrl+x', self.on_closing)
     
-    def _update_result_callback(self, result):
+    def _update_result(self, result):
         """Callback for updating result from screenshot handler"""
         self.root.after(0, self.update_result, result)
     
@@ -389,7 +389,7 @@ class ScreenshotApp:
             # Reinitialize
             self.running = True
             self.ai_processor = AIProcessor(self.api_key)  # Reload context
-            self.screenshot_handler = ScreenshotHandler(self.ai_processor, self._update_result_callback)
+            self.screenshot_handler = ScreenshotHandler(self.ai_processor, self._update_result)
             self._init_ui()
             self._setup_hotkeys()
             
@@ -441,7 +441,37 @@ def main():
     popup_handler = create_popup_menu(root, app)
     root.bind("<Button-3>", popup_handler)
     
+    def start_thread_delayed():
+        app.start_screenshot_thread()
+    
+    root.after(100, start_thread_delayed)
+    print_help()
+    
     root.mainloop()
 
+
+def print_help():
+    """Print help information and keyboard shortcuts"""
+    print("\n" + "="*60)
+    print("KEYBOARD SHORTCUTS:")
+    print("  Shift + A           Toggle window visibility")
+    print("  Ctrl + Shift        Take immediate screenshot")
+    print("  Ctrl + Space        Pause/Resume monitoring")
+    print("  Shift + R           Reload application")
+    print("  Shift + Ctrl + X    Exit application")
+    print("")
+    print("FILES:")
+    print("  • context.txt       Add example questions/answers")
+    print("  • screenshots/      Saved screenshot folder")
+    print("  • .env              API_KEY=your_gemini_key")
+    print("")
+    print("STATUS INDICATORS:")
+    print("  • Number (12-00)    Countdown to next screenshot")
+    print("  • Letter (A,B,C)    AI's answer choice")
+    print("  • X                 No question detected")
+    print("  • WAIT...           Processing screenshot")
+    print("  • Paused            Monitoring paused")
+    print("="*60)
+    
 if __name__ == "__main__":
     main()
