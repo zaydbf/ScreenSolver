@@ -217,9 +217,9 @@ pip install -r requirements.txt
 cp .env_example .env
 ```
 
-2. Edit the `.env` file and add your Google Generative AI API key:
+2. Edit the `.env` file and add your Google Generative AI API keys:
 ```
-API_KEY=your_gemini_api_key_here
+API_KEY=your_gemini_api_key_here1,your_gemini_api_key_here2,your_gemini_api_key_here3,your_gemini_api_key_here4,your_gemini_api_key_here5,......
 ```
 
 ### Step 5: Run the Application
@@ -239,8 +239,9 @@ python app.py
 
 1. Visit the [Google AI Studio](https://aistudio.google.com/)
 2. Sign in with your Google account
-3. Create a new API key
-4. Copy the key and paste it into your `.env` file
+3. Create a new project (use multiple projects to rotate between keys)
+3. Create a new API key (for each project)
+4. Copy the keys and paste it into your `.env` file, seperated by ","
 
 <div align="right">
   <a href="#readme-top">
@@ -291,7 +292,7 @@ python app.py
 ### Environment Variables
 Create a `.env` file with:
 ```
-API_KEY=your_gemini_api_key_here
+API_KEY=your_gemini_api_key_here1,your_gemini_api_key_here2,your_gemini_api_key_here3, ....
 ```
 
 ### Customizable Settings

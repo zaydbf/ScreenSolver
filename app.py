@@ -3,10 +3,12 @@ import time
 import threading
 import os
 from PIL import ImageGrab
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import json
 import keyboard
 import dotenv
+from PIL import Image
 
 # UI CONFIGURATION
 class UIConfig:
@@ -20,16 +22,22 @@ class UIConfig:
 
 # CONFIGURATION AND SETUP
 def load_environment():
-    """Load environment variables and configure API"""
+    """Load multiple API keys from environment"""
     dotenv.load_dotenv()
-    api_key = os.getenv("API_KEY")
+    # Get the string and split it into a list
+    keys_str = os.getenv("API_KEYS", "")
+    api_keys = [k.strip() for k in keys_str.split(",") if k.strip()]
     
-    if not api_key:
-        print("API key not found. Please set the API_KEY environment variable.")
-        exit(1)
+    if not api_keys:
+        # Fallback to the single API_KEY if only One API_KEY is provided
+        single_key = os.getenv("API_KEY")
+        if single_key:
+            api_keys = [single_key]
+        else:
+            print("No API keys found in .env")
+            exit(1)
     
-    genai.configure(api_key=api_key)
-    return api_key
+    return api_keys
 
 def load_context_text():
     """Load helper text from context.txt file"""
@@ -80,52 +88,75 @@ The image is provided below. Analyze it and provide your answer in the specified
 
 # AI PROCESSING
 class AIProcessor:
-    def __init__(self, api_key):
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
-        self.api_key = api_key
+    def __init__(self, api_keys):
+        self.api_keys = api_keys
+        self.current_key_index = 0
+        self.model_id = 'gemini-3-flash-preview' 
         self.prompt = create_prompt(load_context_text())
-    
+        self._setup_current_client()
+        '''
+        For the next developper : 
+        If you're having issues setting  up your model, uncomment the code below to see available models
+        '''
+        # for model in self.client.models.list():
+        #     print(f"Available: {model.name}")
+
+    def _setup_current_client(self):
+        """Initializes the client with the current key index"""
+        key = self.api_keys[self.current_key_index]
+        self.client = genai.Client(api_key=key)
+        print(f"Using API Key #{self.current_key_index + 1}")
+
+    def rotate_key(self):
+        """Switch to the next available key"""
+        self.current_key_index = (self.current_key_index + 1) % len(self.api_keys)
+        self._setup_current_client()
+
     def validate_api_key(self):
-        """Validate if the Gemini API key is working"""
-        if not self.api_key or self.api_key.strip() == "":
-            return False, "API key is not set. Please set the API_KEY environment variable."
-        
         try:
-            response = self.model.generate_content(["Hi"])
-            if not response or not hasattr(response, 'text') or not response.text:
-                return False, "Gemini API not working, or key invalid"
-        except Exception:
-            return False, "Gemini not working."
-        
-        return True, "OK"
-    
-    def process_screenshot(self, temp_filename):
-        """Send screenshot to AI and get structured response"""
-        try:
-            with open(temp_filename, 'rb') as img_file:
-                image_data = img_file.read()
-            
-            if not image_data:
-                return {"error": "Screenshot is empty", "final_choice": "X"}
-            
-            response = self.model.generate_content([self.prompt, {"mime_type": "image/png", "data": image_data}])
-            text_response = response.text
-            
-            # Parse JSON response
-            json_start = text_response.find('{')
-            json_end = text_response.rfind('}') + 1
-            
-            if json_start >= 0 and json_end > json_start:
-                json_str = text_response[json_start:json_end]
-                parsed_json = json.loads(json_str)
-                return parsed_json
-            else:
-                return {"final_choice": "X"}
-                
-        except json.JSONDecodeError:
-            return {"final_choice": "X"}
+            response = self.client.models.generate_content(
+                model=self.model_id, contents="Hi"
+            )
+            return True, "OK"
         except Exception as e:
-            return {"error": str(e), "final_choice": "X"}
+            print(f"DEBUG: Actual API Error: {e}")
+            return False, str(e)
+            
+            
+    def process_screenshot(self, temp_filename):
+        """Send screenshot with retry logic for rate limits"""
+        img = Image.open(temp_filename)
+        
+        # Try up to the number of keys we have
+        for _ in range(len(self.api_keys)):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model_id,
+                    contents=[self.prompt, img]
+                )
+                
+                # Parse JSON (Keeping your original logic)
+                text_response = response.text
+                json_start = text_response.find('{')
+                json_end = text_response.rfind('}') + 1
+                
+                if json_start >= 0 and json_end > json_start:
+                    return json.loads(text_response[json_start:json_end])
+                return {"final_choice": "X"}
+
+            except Exception as e:
+                error_msg = str(e).lower()
+                # Check specifically for Rate Limit (429)
+                if "429" in error_msg or "quota" in error_msg:
+                    print(f"Key {self.current_key_index + 1} hit limit. Rotating...")
+                    self.rotate_key()
+                    time.sleep(1) # Short pause before retry
+                    continue 
+                else:
+                    # If it's a different error, don't rotate, just return it
+                    return {"error": str(e), "final_choice": "X"}
+        
+        return {"error": "All keys exhausted rate limits", "final_choice": "X"}
 
 # SCREENSHOT HANDLER
 class ScreenshotHandler:
@@ -162,8 +193,8 @@ class ScreenshotApp:
     def __init__(self, root):
         self.root = root
         self.config = UIConfig()
-        self.api_key = load_environment()
-        self.ai_processor = AIProcessor(self.api_key)
+        self.api_keys = load_environment()
+        self.ai_processor = AIProcessor(self.api_keys)
         self.screenshot_handler = ScreenshotHandler(self.ai_processor, self._update_result)
         
         # App state
